@@ -32,9 +32,13 @@ def check_csv(csv_path, allowed_APs):
                 csv_reader = csv.reader(csvfile)
                 headers = next(csv_reader)
 
-                bssid_index = headers.index('BSSID')
-                essid_index = headers.index('ESSID')
-                channel_index = headers.index('channel')
+                bssid_index = next((i for i, header in enumerate(header) if 'BSSID' in header), None)
+                essid_index = next((i for i, header in enumerate(header) if 'ESSID' in header), None)
+                channel_index = next((i for i, header in enumerate(header) if 'channel' in header), None)
+
+                if bssid_index is None or essid_index is None or channel_idex is None:
+                    print("Columns not found in the CSV file.")
+                    return death_counter
 
                 for r in csv_reader:
                     try:
@@ -42,10 +46,9 @@ def check_csv(csv_path, allowed_APs):
                         bssid = r[bssid_index].strip()
                         essid = r[essid_index].strip()
                         
-                        print(f"BSSID FOUND: {t_mac}, ESSID FOUND: {essid}")
-
                         if essid not in allowed_APs:
                             deauth(t_mac=t_mac, bssid=bssid, iface="wlan1", ch=int(r[channel_index]), count=5)
+                            print(f"BSSID FOUND: {t_mac}, ESSID FOUND: {essid}")
                     except IndexError as e:
                         print(f"IndexError: {e}, Row: {r}")
         except Exception as e:
