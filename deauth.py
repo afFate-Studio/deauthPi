@@ -29,13 +29,13 @@ def check_csv(csv_path, allowed_APs):
         with open(csv_path, 'r') as csvfile:
         reader = csv.DictReader(csvfile)
             for r in reader:
-                keys = ['BSSID, 'ESSID', 'channel']
+                keys = ['BSSID', 'ESSID', 'channel']
                 if all(key in r for key in keys):
                     t_mac = r['BSSID']
                     bssid = r['BSSID']
                     essid = r['ESSID']
                 if essid not in allowed_APs:
-                  deauth(t_mac=t_mac, bssid=bssid, iface="wlan1", ch=int(r['channel]), count=5)
+                  deauth(t_mac=t_mac, bssid=bssid, iface="wlan1", ch=int(r['channel']), count=5)
     return deauth_counter
 
 def run_airodump(t, ch, allowed_APs):
@@ -46,9 +46,9 @@ def run_airodump(t, ch, allowed_APs):
 
     process.terminate()
     
-    merged_files = merge_csv_files()
+    merge_csv_files()
 
-    deauth_counter = check_csv(csv_path="merged_files", allowed_APs=allowed_APs)
+    deauth_counter = check_csv(csv_path="merged-scan.csv", allowed_APs=allowed_APs)
     
 
 def merge_csv_files():
@@ -70,9 +70,9 @@ def merge_csv_files():
                     next(csv_reader)
                     csv_writer.writerows(csv_reader)
 
-        for file in files:
-            os.remove(file)
-    return "merged-scan.csv"
+       # for file in files:
+       #     os.remove(file)
+    
 
 def threading_func(ch_list, allowed_APs, t):
 
