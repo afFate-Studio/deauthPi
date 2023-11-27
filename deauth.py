@@ -32,9 +32,9 @@ def check_csv(csv_path, allowed_APs):
                 csv_reader = csv.reader(csvfile)
                 headers = next(csv_reader)
 
-                bssid_index = next((i for i, header in enumerate(header) if 'BSSID' in header), None)
-                essid_index = next((i for i, header in enumerate(header) if 'ESSID' in header), None)
-                channel_index = next((i for i, header in enumerate(header) if 'channel' in header), None)
+                bssid_index = next((i for i, header in enumerate(headers) if 'BSSID' in header), None)
+                essid_index = next((i for i, header in enumerate(headers) if 'ESSID' in header), None)
+                channel_index = next((i for i, header in enumerate(headers) if 'channel' in header), None)
 
                 if bssid_index is None or essid_index is None or channel_idex is None:
                     print("Columns not found in the CSV file.")
