@@ -34,8 +34,9 @@ def check_csv(csv_path, allowed_APs):
                     t_mac = r['BSSID']
                     bssid = r['BSSID']
                     essid = r['ESSID']
-                if essid not in allowed_APs:
-                  deauth(t_mac=t_mac, bssid=bssid, iface="wlan1", ch=int(r['channel']), count=5)
+       
+                    if essid not in allowed_APs:
+                      deauth(t_mac=t_mac, bssid=bssid, iface="wlan1", ch=int(r['channel']), count=5)
     return deauth_counter
 
 def run_airodump(t, ch, allowed_APs):
