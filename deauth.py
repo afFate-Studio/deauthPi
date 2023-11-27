@@ -38,7 +38,7 @@ def check_csv(csv_path, allowed_APs):
 
                 if bssid_index is None or essid_index is None or channel_idex is None:
                     print("Columns not found in the CSV file.")
-                    return death_counter
+                    return deauth_counter
 
                 for r in csv_reader:
                     try:
