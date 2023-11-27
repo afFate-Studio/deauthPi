@@ -27,7 +27,7 @@ def deauth(t_mac, bssid, iface, ch, count=1):
 def check_csv(csv_path, allowed_APs):
     with csv_lock:
         with open(csv_path, 'r') as csvfile:
-        reader = csv.DictReader(csvfile)
+            reader = csv.DictReader(csvfile)
             for r in reader:
                 keys = ['BSSID', 'ESSID', 'channel']
                 if all(key in r for key in keys):
