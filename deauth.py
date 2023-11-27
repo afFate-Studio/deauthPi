@@ -3,7 +3,6 @@ import csv
 import time
 import subprocess
 import os
-import shutil
 
 from threading import Thread, Lock
 from scapy.all import RadioTap, Dot11, Dot11Deauth, sendp
@@ -27,80 +26,59 @@ def deauth(t_mac, bssid, iface, ch, count=1):
 
 def check_csv(csv_path, allowed_APs):
     with csv_lock:
-        try:
-            with open(csv_path, 'r') as csvfile:
-                csv_reader = csv.reader(csvfile)
-                headers = next(csv_reader)
-
-                bssid_index = next((i for i, header in enumerate(headers) if 'BSSID' in header), None)
-                essid_index = next((i for i, header in enumerate(headers) if 'ESSID' in header), None)
-                channel_index = next((i for i, header in enumerate(headers) if 'channel' in header), None)
-
-                if bssid_index is None or essid_index is None or channel_idex is None:
-                    print("Columns not found in the CSV file.")
-                    return deauth_counter
-
-                for r in csv_reader:
-                    try:
-                        t_mac = r[bssid_index].strip()
-                        bssid = r[bssid_index].strip()
-                        essid = r[essid_index].strip()
-                        
-                        if essid not in allowed_APs:
-                            deauth(t_mac=t_mac, bssid=bssid, iface="wlan1", ch=int(r[channel_index]), count=5)
-                            print(f"BSSID FOUND: {t_mac}, ESSID FOUND: {essid}")
-                    except IndexError as e:
-                        print(f"IndexError: {e}, Row: {r}")
-        except Exception as e:
-            print(f"Error reading CSV: {e}")
-    
+        with open(csv_path, 'r') as csvfile:
+        reader = csv.DictReader(csvfile)
+            for r in reader:
+                keys = ['BSSID, 'ESSID', 'channel']
+                if all(key in r for key in keys):
+                    t_mac = r['BSSID']
+                    bssid = r['BSSID']
+                    essid = r['ESSID']
+                if essid not in allowed_APs:
+                  deauth(t_mac=t_mac, bssid=bssid, iface="wlan1", ch=int(r['channel]), count=5)
     return deauth_counter
 
-
-def count_files():
-    cwd = os.getcwd()
-
-    print(f"Current directory: {cwd}")
-
-    files = os.listdir(cwd)
-    
-    print(f"Files in directory: {files}")
-
-    file_count = sum(1 for file in files if file.startswith("output-") and file.endswith(".csv"))
-    
-    print(f"Found {file_count} CSV files")
-
-    return file_count
-
-def run_airodump(duration, ch, allowed_APs):
+def run_airodump(t, ch, allowed_APs):
 
     process = subprocess.Popen(["airodump-ng", "--output-format", "csv", "--write", "output", "--channel", str(ch), "--write-interval", "1", "wlan1"])
 
-    time.sleep(duration)
+    time.sleep(t)
 
     process.terminate()
-
-    fc = count_files()
-
-    print(f"Found {fc} CSV files to merge")
     
-    with open("merged-scan.csv", "wb") as merged_scan:
-        for i in range(1, fc + 1):
-            with open(f"output-{i:02d}.csv", "rb") as current_file:
-                shutil.copyfileobj(current_file, merged_scan)
-    
-    print("Merged successfully")
+    merged_files = merge_csv_files()
 
-    check_csv(csv_path="merged-scan.csv", allowed_APs=allowed_APs)
+    deauth_counter = check_csv(csv_path="merged_files", allowed_APs=allowed_APs)
     
-    print(f"Total deauth packets sent: {deauth_counter}")
 
-def threading_func(ch_list, allowed_APs, duration):
-    global deauth_counter
+def merge_csv_files():
+    files = [f for f in os.listdir() if f.startswith("output-") and f.endswith(".csv")]
+    if files:
+        files.sort(key=lambda x: int(x.split('-')[1].split('.')[0]))
+
+        with open("merged-scan.csv", 'w', newline='') as output_csv:
+            csv_writer = csv.writer(output_csv)
+
+            with open(files[0], 'r') as first_file:
+                csv_reader = csv.reader(first_file)
+                header = next(csv_reader)
+                csv_writer.writerow(header)
+
+            for file in files:
+                with open(file, 'r') as current_file:
+                    csv_reader = csv.reader(current_file)
+                    next(csv_reader)
+                    csv_writer.writerows(csv_reader)
+
+        for file in files:
+            os.remove(file)
+    return "merged-scan.csv"
+
+def threading_func(ch_list, allowed_APs, t):
 
     threads = []
     for ch in ch_list:
-        thread = Thread(target=run_airodump, args=(duration, ch, allowed_APs))
+        thread = Thread(target=run_airodump, args=(t, ch, allowed_APs))
         threads.append(thread)
         thread.start()
     	
@@ -112,4 +90,4 @@ t = 10
 allowed_APs = ["Wapiti2000"] # add Wapiti3004, WapitiWifi, Wapiti77 back
 #ch_list = list(range(1,15)) + [36,40,44,48,52,56,60,64,100,104,108,112,116,132,136,140,144,149,153,157,161,165]
 ch_list = [1,6,11,36,40,44,48,149,153,157,161]
-threading_func(ch_list=ch_list, allowed_APs=allowed_APs, duration=t)
+threading_func(ch_list=ch_list, allowed_APs=allowed_APs, t=t)
