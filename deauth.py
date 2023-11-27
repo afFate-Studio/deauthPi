@@ -25,11 +25,17 @@ def deauth(t_mac, bssid, iface, ch, count=1):
     deauth_counter += count
 
 def check_csv(csv_path, allowed_APs):
+    global deauth_counter
+
     with csv_lock:
         with open(csv_path, 'r') as csvfile:
             reader = csv.DictReader(csvfile)
             for r in reader:
                 keys = ['BSSID', 'ESSID', 'channel']
+                
+                if not all(key in r for key in keys):
+                    print(f"BSSID: {r['BSSID']}, ESSID: {r['ESSID']}, channel: {r['channel']}")
+
                 if all(key in r for key in keys):
                     t_mac = r['BSSID']
                     bssid = r['BSSID']
@@ -40,7 +46,6 @@ def check_csv(csv_path, allowed_APs):
     return deauth_counter
 
 def run_airodump(t, ch, allowed_APs):
-
     process = subprocess.Popen(["airodump-ng", "--output-format", "csv", "--write", "output", "--channel", str(ch), "--write-interval", "1", "wlan1"])
 
     time.sleep(t)
