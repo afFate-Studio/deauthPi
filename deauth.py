@@ -156,7 +156,7 @@ while True:
     #    break
     #print("(-) Invalid Mac Address(es)")
 
-netw_con = find_nic()
+netw_con = get_nic()
 if len(netw_con) == 0:
     print("(-) conect a NIC and try again...")
     exit()
