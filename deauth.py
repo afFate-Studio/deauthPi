@@ -213,7 +213,7 @@ try:
                         if index < 5:
                             pass
                         # won't add MAC address(es) we specified at the beginning
-                        elif r["Station MAC"] in safe_macAddr:
+                        elif r["Probed ESSIDs"] in safe_essid:
                             pass
                         else:
                             # add all the active MAC addresses
